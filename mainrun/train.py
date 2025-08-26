@@ -22,7 +22,7 @@ class Hyperparameters:
     n_head: int = 8
     d_model: int = 512
     dropout: float = 0.1
-    lr: float = 3e-4
+    lr: float = 2e-4
     weight_decay: float = 0.1
     evals_per_epoch: int = 3
     
@@ -146,18 +146,12 @@ class CausalSelfAttention(nn.Module):
         self.proj = nn.Linear(cfg.d_model, cfg.d_model)
         self.attn_drop = nn.Dropout(cfg.dropout)
         self.resid_drop= nn.Dropout(cfg.dropout)
-        self.rotary_emb = RotaryEmbedding(self.head_dim, cfg.block_size)
         self.register_buffer("tril", torch.tril(torch.ones(cfg.block_size, cfg.block_size)))
 
     def forward(self, x: torch.Tensor):
         B, T, C = x.size()
         qkv = self.qkv(x).view(B, T, 3, self.n_head, self.head_dim).transpose(1, 3)
         q, k, v = qkv[..., 0, :, :], qkv[..., 1, :, :], qkv[..., 2, :, :]
-        
-        # Apply rotary embeddings
-        cos, sin = self.rotary_emb(q, T)
-        q, k = apply_rotary_pos_emb(q, k, cos, sin)
-        
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         att = att.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
         att = F.softmax(att, dim=-1)
@@ -165,53 +159,6 @@ class CausalSelfAttention(nn.Module):
         y = att @ v
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         return self.resid_drop(self.proj(y))
-
-class RMSNorm(nn.Module):
-    def __init__(self, dim, eps=1e-8):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(dim))
-        self.eps = eps
-        
-    def forward(self, x):
-        norm = x.norm(dim=-1, keepdim=True) * (x.size(-1) ** -0.5)
-        return self.weight * x / (norm + self.eps)
-
-class RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000):
-        super().__init__()
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-        
-        # Build cache for positions
-        self._build_cache(max_position_embeddings)
-        
-    def _build_cache(self, seq_len):
-        positions = torch.arange(seq_len).unsqueeze(1)
-        freqs = positions * self.inv_freq.unsqueeze(0)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos())
-        self.register_buffer("sin_cached", emb.sin())
-        
-    def forward(self, x, seq_len=None):
-        if seq_len is None:
-            seq_len = x.shape[1]
-        return self.cos_cached[:seq_len], self.sin_cached[:seq_len]
-
-def rotate_half(x):
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-def apply_rotary_pos_emb(q, k, cos, sin):
-    cos = cos.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len, dim]
-    sin = sin.unsqueeze(0).unsqueeze(0)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 class MLP(nn.Module):
     def __init__(self, cfg: GPTConfig):
@@ -227,8 +174,8 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, cfg: GPTConfig):
         super().__init__()
-        self.ln1 = RMSNorm(cfg.d_model)
-        self.ln2 = RMSNorm(cfg.d_model)
+        self.ln1 = nn.LayerNorm(cfg.d_model)
+        self.ln2 = nn.LayerNorm(cfg.d_model)
         self.attn = CausalSelfAttention(cfg)
         self.mlp  = MLP(cfg)
     def forward(self, x):
@@ -241,10 +188,10 @@ class GPT(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.token_emb = nn.Embedding(cfg.vocab_size, cfg.d_model)
-        # Remove positional embeddings as we're using RoPE
+        self.pos_emb   = nn.Parameter(torch.zeros(1, cfg.block_size, cfg.d_model))
         self.drop      = nn.Dropout(cfg.dropout)
         self.blocks    = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layer)])
-        self.ln_f      = RMSNorm(cfg.d_model)
+        self.ln_f      = nn.LayerNorm(cfg.d_model)
         self.head      = nn.Linear(cfg.d_model, cfg.vocab_size, bias=False)
 
         self.apply(self._init_weights)
@@ -252,18 +199,16 @@ class GPT(nn.Module):
 
     @staticmethod
     def _init_weights(module):
-        if isinstance(module, nn.Linear):
-            nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='relu')
-            if module.bias is not None:
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if isinstance(module, nn.Linear) and module.bias is not None:
                 nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='relu')
 
     def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None):
         B, T = idx.size()
         tok = self.token_emb(idx)
-        # No positional embeddings added here - RoPE is applied in attention
-        x = self.drop(tok)
+        pos = self.pos_emb[:, :T, :]
+        x = self.drop(tok + pos)
         for block in self.blocks: x = block(x)
         x = self.ln_f(x)
         logits = self.head(x)
@@ -332,8 +277,8 @@ def main():
     # Create warmup scheduler
     warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
         opt,
-        start_factor=0.01,  # Start at 1% of peak LR (3e-6)
-        end_factor=1.0,     # End at 100% of peak LR (3e-4)
+        start_factor=0.01,  # Start at 1% of peak LR (2e-6)
+        end_factor=1.0,     # End at 100% of peak LR (2e-4)
         total_iters=warmup_steps
     )
     
@@ -341,7 +286,7 @@ def main():
     cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         opt,
         T_max=max_steps - warmup_steps,
-        eta_min=3e-5  # End at 10% of peak LR
+        eta_min=2e-5  # End at 10% of peak LR
     )
     
     # Chain schedulers together
