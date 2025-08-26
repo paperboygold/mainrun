@@ -10,6 +10,48 @@ This document breaks down the optimization strategy into actionable epics, tasks
 
 ---
 
+## EPIC 0: BASELINE VALIDATION (Day 0) ✅ COMPLETED
+**Goal**: Establish and validate baseline performance before any modifications
+**Priority**: CRITICAL - Required for measuring improvements
+**Status**: ✅ COMPLETED - Baseline validated at 1.753271
+
+### Task 0.1: Run Baseline Training ✅
+**Goal**: Reproduce expected baseline performance
+**Success Criteria**: Validation loss matches 1.7533 ± 0.001
+
+- [x] **Subtask 0.1.1**: Execute baseline training
+  - [x] Run `task train` with original configuration
+  - [x] Monitor training stability
+  - [x] Record total training time (~35 minutes on Intel i9 14900kf)
+  
+- [x] **Subtask 0.1.2**: Verify results match expectation
+  - [x] Final validation loss: **1.753271** (matches 1.7533 very closely)
+  - [x] Training progression stable throughout 7 epochs
+  - [x] No divergence or numerical issues
+  
+- [x] **Subtask 0.1.3**: Create baseline backup
+  - [x] Copy `train.py` to `train_baseline.py`
+  - [x] Document baseline configuration:
+    - Optimizer: SGD (lr=0.006, weight_decay=0.0)
+    - Scheduler: CosineAnnealingLR
+    - Model: 6-layer GPT, 27.2M parameters
+    - Batch size: 64, Block size: 128
+    - Dropout: 0.1, Epochs: 7
+  
+- [x] **Subtask 0.1.4**: Establish determinism
+  - [x] Confirm seed=1337 produces reproducible results
+  - [x] Note CPU training ensures deterministic operations
+  - [x] Document exact match to expected baseline
+
+### Baseline Results Summary:
+- **Final Validation Loss**: 1.753271 (target: 1.7533)
+- **Training Time**: ~35 minutes (CPU)
+- **Epochs**: 7 complete
+- **Stability**: No issues observed
+- **Reproducibility**: ✅ Confirmed
+
+---
+
 ## EPIC 1: FOUNDATIONAL TRAINING FIXES (Days 1-2)
 **Goal**: Fix critical training configuration issues to beat baseline
 **Priority**: HIGHEST - These changes alone should achieve primary goal

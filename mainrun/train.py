@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from torch.optim.lr_scheduler import SequentialLR
 from datasets import load_dataset
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
 from tqdm import tqdm
@@ -21,8 +22,8 @@ class Hyperparameters:
     n_head: int = 8
     d_model: int = 512
     dropout: float = 0.1
-    lr: float = 6e-3
-    weight_decay: float = 0.0
+    lr: float = 3e-4
+    weight_decay: float = 0.1
     evals_per_epoch: int = 3
     
     epochs: int = 7
@@ -262,8 +263,38 @@ def main():
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.log("model_info", parameters_count=model_params)
     
-    opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_steps)
+    opt = torch.optim.AdamW(
+        model.parameters(),
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        betas=(0.9, 0.999),
+        eps=1e-8
+    )
+    
+    # Calculate warmup steps (10% of total)
+    warmup_steps = max_steps // 10
+    
+    # Create warmup scheduler
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        opt,
+        start_factor=0.01,  # Start at 1% of peak LR (3e-6)
+        end_factor=1.0,     # End at 100% of peak LR (3e-4)
+        total_iters=warmup_steps
+    )
+    
+    # Create cosine decay scheduler
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        opt,
+        T_max=max_steps - warmup_steps,
+        eta_min=3e-5  # End at 10% of peak LR
+    )
+    
+    # Chain schedulers together
+    scheduler = SequentialLR(
+        opt,
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup_steps]
+    )
 
     def evaluate():
         model.eval()
