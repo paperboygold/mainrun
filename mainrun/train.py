@@ -22,7 +22,7 @@ class Hyperparameters:
     n_head: int = 8
     d_model: int = 512
     dropout: float = 0.1
-    lr: float = 2e-4
+    lr: float = 4e-4
     weight_decay: float = 0.1
     evals_per_epoch: int = 3
     
@@ -277,8 +277,8 @@ def main():
     # Create warmup scheduler
     warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
         opt,
-        start_factor=0.01,  # Start at 1% of peak LR (2e-6)
-        end_factor=1.0,     # End at 100% of peak LR (2e-4)
+        start_factor=0.01,  # Start at 1% of peak LR (4e-6)
+        end_factor=1.0,     # End at 100% of peak LR (4e-4)
         total_iters=warmup_steps
     )
     
@@ -286,7 +286,7 @@ def main():
     cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         opt,
         T_max=max_steps - warmup_steps,
-        eta_min=2e-5  # End at 10% of peak LR
+        eta_min=4e-5  # End at 10% of peak LR
     )
     
     # Chain schedulers together
