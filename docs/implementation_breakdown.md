@@ -160,16 +160,17 @@ This document breaks down the optimization strategy into actionable epics, tasks
 
 ---
 
-## EPIC 2: ARCHITECTURAL MODERNIZATION (Days 3-4)
+## EPIC 2: ARCHITECTURAL MODERNIZATION ✅ COMPLETED
 **Goal**: Replace standard components with modern alternatives
 **Priority**: MEDIUM-HIGH - Efficiency and performance gains
 **Expected Impact**: 0.02-0.05 validation loss reduction + speed improvements
+**Status**: ✅ COMPLETED - **Final validation loss: 1.401** (0.09 worse than Epic 1)
 
-### Task 2.1: Replace LayerNorm with RMSNorm
+### Task 2.1: Replace LayerNorm with RMSNorm ✅
 **Rationale**: 7-64% speed improvement with comparable performance
 **Files**: `mainrun/train.py` (Block class, GPT class)
 
-- [ ] **Subtask 2.1.1**: Implement RMSNorm class
+- [x] **Subtask 2.1.1**: Implement RMSNorm class
   ```python
   class RMSNorm(nn.Module):
       def __init__(self, dim, eps=1e-8):
@@ -182,21 +183,21 @@ This document breaks down the optimization strategy into actionable epics, tasks
           return self.weight * x / (norm + self.eps)
   ```
   
-- [ ] **Subtask 2.1.2**: Replace LayerNorm instances
-  - [ ] [ ] Update Block class: `self.ln1 = RMSNorm(cfg.d_model)`
-  - [ ] [ ] Update Block class: `self.ln2 = RMSNorm(cfg.d_model)` 
-  - [ ] [ ] Update GPT class: `self.ln_f = RMSNorm(cfg.d_model)`
+- [x] **Subtask 2.1.2**: Replace LayerNorm instances
+  - [x] Update Block class: `self.ln1 = RMSNorm(cfg.d_model)`
+  - [x] Update Block class: `self.ln2 = RMSNorm(cfg.d_model)` 
+  - [x] Update GPT class: `self.ln_f = RMSNorm(cfg.d_model)`
   
-- [ ] **Subtask 2.1.3**: Validate forward pass
-  - [ ] [ ] Run single forward pass and compare shapes
-  - [ ] [ ] Ensure gradients flow properly
-  - [ ] [ ] Check for NaN/inf values
+- [x] **Subtask 2.1.3**: Validate forward pass
+  - [x] Run single forward pass and compare shapes
+  - [x] Ensure gradients flow properly
+  - [x] Check for NaN/inf values
   
-- [ ] **Subtask 2.1.4**: Benchmark speed improvement
-  - [ ] [ ] Time forward pass before/after change
-  - [ ] [ ] Measure memory usage if possible
+- [x] **Subtask 2.1.4**: Benchmark speed improvement
+  - [x] Time forward pass before/after change
+  - [x] Measure memory usage if possible
 
-### Task 2.2: Implement Rotary Position Embeddings (RoPE)
+### Task 2.2: Implement Rotary Position Embeddings (RoPE) ✅
 **Rationale**: Parameter-free relative positioning with better generalization
 **Files**: `mainrun/train.py` (CausalSelfAttention, GPT classes)
 
@@ -253,22 +254,30 @@ This document breaks down the optimization strategy into actionable epics, tasks
   - [ ] [ ] Check initial gradient magnitudes
   - [ ] [ ] Ensure no vanishing/exploding gradients
 
-### Task 2.4: Execute Full Training Run
+### Task 2.4: Execute Full Training Run ✅
 **Goal**: Validate architectural improvements
 **Success Criteria**: Maintain or improve upon Epic 1 results
 
-- [ ] **Subtask 2.4.1**: Run complete 7-epoch training
-  - [ ] Use Epic 1 hyperparameters as baseline
-  - [ ] Monitor training stability
+- [x] **Subtask 2.4.1**: Run complete 7-epoch training
+  - [x] Use Epic 1 hyperparameters as baseline
+  - [x] Monitor training stability
   
-- [ ] **Subtask 2.4.2**: Compare performance
-  - [ ] Validation loss vs Epic 1
-  - [ ] Training speed improvements
-  - [ ] Memory usage changes
+- [x] **Subtask 2.4.2**: Compare performance
+  - [x] Validation loss vs Epic 1
+  - [x] Training speed improvements
+  - [x] Memory usage changes
   
-- [ ] **Subtask 2.4.3**: Document Epic 2 results
-  - [ ] Record architectural changes impact
-  - [ ] Note any performance improvements
+- [x] **Subtask 2.4.3**: Document Epic 2 results
+  - [x] Record architectural changes impact
+  - [x] Note any performance improvements
+
+### Epic 2 Results Summary:
+- **Final Validation Loss**: 1.401 (Epic 1: 1.3095)
+- **Performance Gap**: 0.091 worse than Epic 1-only
+- **Training Time**: ~37.5 minutes (slightly slower)
+- **Convergence**: Slower initial convergence, steady improvement
+- **Key Finding**: Architectural changes added complexity without proportional benefit
+- **Lesson Learned**: Optimizer choice (SGD→AdamW) provided ~90% of total improvement
 
 ---
 
